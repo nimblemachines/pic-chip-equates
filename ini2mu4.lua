@@ -51,13 +51,17 @@ function parse_ini(s)
             descr = fix_irq_descr(descr)
         }
     end
-    -- Create a "dummy" LAST vector so we know where the table ends.
-    local last_vector = vectors[#vectors].irq_num + 1
-    vectors[#vectors+1] = {
-        name = "LAST",
-        irq_num = last_vector,
-        descr = "dummy LAST vector to mark end of vector table"
-    }
+
+    -- Need this because many PICs don't have an interrupt vector table!
+    if #vectors > 0 then
+        -- Create a "dummy" LAST vector so we know where the table ends.
+        local last_vector = vectors[#vectors].irq_num + 1
+        vectors[#vectors+1] = {
+            name = "LAST",
+            irq_num = last_vector,
+            descr = "dummy LAST vector to mark end of vector table"
+        }
+    end
 
     -- Parse SFRs.
     sfrs = {}
@@ -106,7 +110,7 @@ function parse_ini(s)
             end
 
             if is_shorter(name, bits[lsb]) then
-                print(string.format("  replacing %s with %s", bits[lsb], name))
+                --print(string.format("  replacing %s with %s", bits[lsb], name))
                 bits[lsb] = name
             end
         end
@@ -142,17 +146,26 @@ end
 function print_equates(pack_file, chip, eq)
     local p = function(fmt, ...) print(string.format(fmt, ...)) end
 
-    p("( Equates for %s, generated from pack file %s.)", chip, pack_file)
+    p("( Equates for %s, generated from %s.)", chip, pack_file)
     p "\ndecimal"
     p("\n%d constant #flash", eq.rom_size)      -- XXX print as KiB?
     p("\"%04x constant @ram", eq.ram_start)
-    p("%d constant #ram", eq.ram_size)
-    p("\"%6x constant @eeprom", eq.eeprom_start)
-    p("%d constant #eeprom", eq.eeprom_end - eq.eeprom_start + 1)
-    p "\n( Vector table)"
-    for _,v in ipairs(eq.vectors) do
-        p("%3d vector %-14s | %s", v.irq_num, v.name.."_IRQ", v.descr)
+
+    if eq.ram_size then
+        p("%d constant #ram", eq.ram_size)
     end
+    if eq.eeprom_start then
+        p("\"%6x constant @eeprom", eq.eeprom_start)
+        p("%d constant #eeprom", eq.eeprom_end - eq.eeprom_start + 1)
+    end
+
+    if #eq.vectors > 0 then
+        p "\n( Vector table)"
+        for _,v in ipairs(eq.vectors) do
+            p("%3d vector %-14s | %s", v.irq_num, v.name.."_IRQ", v.descr)
+        end
+    end
+
     p "hex\n\n( SFRs)"
     for _,sfr in ipairs(eq.sfrs) do
         local alias = sfr_alias[sfr.addr]
