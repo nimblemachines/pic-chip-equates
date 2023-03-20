@@ -179,11 +179,12 @@ function print_equates(pack_file, chip, eq)
     end
 end
 
--- arg 1 is pack file, arg 2 is chip
+-- arg 1 is ini file, in the following form: ini/<pack>/<chip>.ini
 function doit()
-    local pack_file = arg[1]
-    local chip = arg[2]
-    local contents = io.stdin:read("a")   -- read entire file as a string
+    local pack_file, chip = arg[1]:match "^ini/(..-)/(..-)%.ini"
+    local f = io.open(arg[1], "r")
+    local contents = f:read("a")   -- read entire file as a string
+    f:close()
     print_equates(pack_file, chip, parse_ini(contents))
 end
 
