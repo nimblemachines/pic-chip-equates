@@ -3,8 +3,8 @@
 
 ### Variables
 
-ALL_CHIPS=	16f1454 18f26q43 18f26q83
-MU4_FILES=	$(patsubst %,%.mu4,$(ALL_CHIPS))
+CHIPS=		16f1454 18f26q43 18f26q83
+MU4_FILES=	$(patsubst %,%.mu4,$(CHIPS))
 INI_DIRS=	$(wildcard ini/*/)
 
 vpath %.ini $(INI_DIRS)
@@ -14,10 +14,6 @@ vpath %.ini $(INI_DIRS)
 
 all : $(MU4_FILES)
 
-echo :
-	@echo $(ALL_CHIPS)
-	@echo $(MU4_FILES)
-	@echo $(INI_DIRS)
 
 ### Rules
 
