@@ -7,7 +7,7 @@ function print_commands(pack_index, repo_url, pack_pattern, cmd)
         -- Which pack(s) do we want?
         if p:match(pack_pattern) then
             if cmd == "show" then
-                print(fmt("%s%s", repo_url, p))
+                print(p)
             elseif cmd == "get" then
                 print(fmt("[ -f pack/%s ] || curl -L -o pack/%s %s%s", p, p, repo_url, p))
             end

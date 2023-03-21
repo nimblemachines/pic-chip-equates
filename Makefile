@@ -25,13 +25,18 @@ $(MU4_FILES) : ini2mu4.lua
 
 ### Downloading and parsing Microchip's pack repository index file.
 
+.PHONY : update
+
 PACK_URL=	https://packs.download.microchip.com/
 
-mchp-pack-index.html :
-	curl -o $@ $(PACK_URL)
+mchp-pack-index.html update :
+	curl -o mchp-pack-index.html $(PACK_URL)
 
 mchp-pack-index.lua : mchp-pack-index.html parse-pack-index.lua
 	lua parse-pack-index.lua < $< > $@
+
+
+### Downloading pack files
 
 .PHONY : show-packs get-packs
 
@@ -39,7 +44,7 @@ pack :
 	mkdir pack
 
 show-packs : mchp-pack-index.lua
-	@lua gen-downloads.lua $< "" $(MATCH) show
+	@lua gen-downloads.lua $< $(PACK_URL) $(MATCH) show
 
 get-packs : mchp-pack-index.lua pack
 	@lua gen-downloads.lua $< $(PACK_URL) $(MATCH) get | sh
@@ -54,9 +59,8 @@ get-packs : mchp-pack-index.lua pack
 #
 unzip-packs :
 	for p in pack/*.atpack; do \
-		pname=$$(basename $$p .atpack); \
-		mkdir -p ini/$$pname; \
-		unzip -j -u $$p "*.ini" -d ini/$$pname; done
+		dir=ini/$$(basename $$p .atpack); mkdir -p $$dir; \
+		unzip -j -u $$p "*.ini" -d $$dir; done
 
 
 ### Cleaning up the mess
