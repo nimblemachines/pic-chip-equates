@@ -2,9 +2,9 @@
 
 ## Motivation
 
-I'm interested in supporting Microchip's PIC16, PIC18 &ndash; and, possibly, PIC24 and dsPIC33 &ndash; chips in [muforth](https://muforth.nimblemachines.com/).
+I'm interested in supporting Microchip's PIC16, PIC18 &ndash; and, possibly, PIC24 and dsPIC33 &ndash; chips in [muforth](https://github.com/nimblemachines/muforth).
 
-One of the issues with rolling your own language &ndash; especially if, like [muforth](https://muforth.nimblemachines.com/), it is a cross-compiler that targets microcontrollers &ndash; is that you need to find or create, for every chip you care about, "equates" files that describe the i/o registers, their memory addresses, and their bit definitions.
+One of the issues with rolling your own language &ndash; especially if, like [muforth](https://github.com/nimblemachines/muforth), it is a cross-compiler that targets microcontrollers &ndash; is that you need to find or create, for every chip you care about, "equates" files that describe the i/o registers, their memory addresses, and their bit definitions.
 
 ## Approaches we could take
 
