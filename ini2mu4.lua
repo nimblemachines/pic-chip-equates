@@ -65,11 +65,10 @@ function parse_ini(s)
 
     -- Parse SFRs.
     sfrs = {}
-    sfr_alias = {}
     for name, addr, bit_width in s:gmatch("SFR=(%w+),(%x+),(%d+)") do
         addr, bit_width = tonumber(addr, 16), tonumber(bit_width, 10)
         if bit_width > 8 then
-            sfr_alias[addr] = { name = name, bit_width = bit_width }
+            sfrs[#sfrs+1] = { name = name, addr = addr, bit_width = bit_width }
         else
             -- assume a bit_width of 8
             sfrs[#sfrs+1] = { name = name, addr = addr }
@@ -125,7 +124,6 @@ function parse_ini(s)
         eeprom_end = eeprom_end,
         vectors = vectors,
         sfrs = sfrs,
-        sfr_alias = sfr_alias,
         sfr_fields = sfr_fields
     }
 end
@@ -144,7 +142,10 @@ function bit_names(bits)
 end
 
 function print_equates(pack_file, chip, eq)
-    local p = function(fmt, ...) print(string.format(fmt, ...)) end
+    local p = function(fmt, ...)
+        -- Remove any trailing whitespace
+        print((string.gsub(string.format(fmt, ...), "%s+$", "")))
+    end
 
     p("( Equates for %s, generated from %s.)", chip, pack_file)
     p "\ndecimal"
@@ -168,14 +169,13 @@ function print_equates(pack_file, chip, eq)
 
     p "hex\n\n( SFRs)"
     for _,sfr in ipairs(eq.sfrs) do
-        local alias = sfr_alias[sfr.addr]
-        if alias then
+        if sfr.bit_width then
             p("%04x equ %-12s | alias; %d bits wide",
-                sfr.addr,
-                alias.name,
-                alias.bit_width)
+                sfr.addr, sfr.name, sfr.bit_width)
+        else
+            p("%04x equ %-12s%s",
+                sfr.addr, sfr.name, bit_names(sfr_fields[sfr.addr]))
         end
-        p("%04x equ %-12s%s", sfr.addr, sfr.name, bit_names(sfr_fields[sfr.addr]))
     end
 end
 

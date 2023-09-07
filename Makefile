@@ -3,23 +3,39 @@
 
 ### Variables
 
-CHIPS=		16f1454 18f26q43 18f26q83
-MU4_FILES=	$(patsubst %,%.mu4,$(CHIPS))
-INI_DIRS=	$(wildcard ini/*/)
+CHIPS=		16f1454 18f26q43 18f26q84
+MU4_FILES=	$(patsubst %,mu/%.mu4,$(CHIPS))
 
-vpath %.ini $(INI_DIRS)
-
-
-### Targets
-
-all : $(MU4_FILES)
+vpath %.ini $(wildcard ini/*/)
 
 
-### Rules
+### Main targets
 
-$(MU4_FILES) : ini2mu4.lua
+.PHONY : chips example get-example-packs
 
-%.mu4 : %.ini
+# Default target
+# Since unzip-packs might have created new ini/<something> directories, chips
+# cannot be a pre-requisite target; it needs to be a recursive invocation of
+# make in order to re-eval vpath.
+example : get-example-packs unzip-packs
+	make chips
+
+# Download the packs needed for the example CHIPS variable defined above.
+get-example-packs :
+	MATCH="PIC12%-16F1" make get-packs
+	MATCH="PIC18F%-Q" make get-packs
+
+chips : $(MU4_FILES)
+
+
+### Generating .mu4 files from .ini files
+
+mu :
+	mkdir mu/
+
+$(MU4_FILES) : ini2mu4.lua mu
+
+mu/%.mu4 : %.ini
 	lua ini2mu4.lua $< > $@
 
 
@@ -68,7 +84,7 @@ unzip-packs :
 .PHONY : clean clean-ini clean-packs clean-index spotless
 
 clean :
-	rm -f *.mu4
+	rm -rf mu/
 
 clean-ini :
 	rm -rf ini/

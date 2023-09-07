@@ -22,11 +22,13 @@ This is our goldmine.
 
 # How do I use it?
 
-First you need to figure out which packs you need to download. To see a list of everything, do:
+To generate the examples shown in the ``CHIPS`` variable, just type ``make``. This will download the necessary packs, unzip them, and convert the ``.ini`` files for the specified chips to ``.mu4`` files in the ``mu/`` directory.
+
+If you want to create a custom list of ``CHIPS``, you need to figure out which packs you need to download. To see a list of everything, do:
 
     MATCH="." make show-packs
 
-The MATCH variable is a Lua pattern, not a POSIX regular expression, but it shouldn't be hard to narrow down the list by changing the MATCH expression. ``.`` matches any character; ``+`` as a suffix does a greedy "zero or more" match of the preceding character; ``-`` does a non-greedy "zero or more" match.
+The MATCH variable is a Lua pattern, not a POSIX regular expression, but it shouldn't be hard to narrow down the list by changing the MATCH expression. ``.`` matches any character; ``+`` as a suffix does a greedy "zero or more" match of the preceding character; ``-`` does a non-greedy "zero or more" match. If you want to match a literal ``-`` you have to spell it ``%-``.
 
 Once you have a list that you like, change ``show-packs`` to ``get-packs``. The packs will be downloaded and placed in the ``pack/`` directory.
 
@@ -40,9 +42,9 @@ Also, if you want to make sure you have the latest list, ``make update`` will fo
 
 Once you have populated ``ini/`` and set the ``CHIPS`` variable, do
 
-    make
+    make chips
 
-and a ``.mu4`` file will be generated for each chip that you specified.
+and a ``.mu4`` file will be generated in the ``mu/`` directory for each chip that you specified.
 
 # BSD-licensed!
 
