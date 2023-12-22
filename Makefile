@@ -3,7 +3,10 @@
 
 ### Variables
 
-CHIPS=		16f1454 18f26q43 18f26q84
+CHIPS=		16f1454 \
+		18f55q43 18f56q43 18f57q43 \
+		18f56q84 18f57q84
+
 MU4_FILES=	$(patsubst %,mu/%.mu4,$(CHIPS))
 
 vpath %.ini $(wildcard ini/*/)

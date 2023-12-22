@@ -42,6 +42,14 @@ function parse_ini(s)
     local ram_start = s:match("COMMON=(%x+)%-")
     if ram_start then ram_start = tonumber(ram_start, 16) end
 
+    -- We need to know how many bits in the bank select register (BSR).
+    -- For many PIC18 parts, it is 4 bits. There are several newer parts
+    -- with lots of RAM and i/o that have 6 bit BSRs.
+    -- For some reason, at least with the K and Q parts, it has a "0x"
+    -- prefix!
+    local bsr_bits = s:match("BSRBITS=0x(%x+)")
+    if bsr_bits then bsr_bits = tonumber(bsr_bits, 16) end
+
     -- Parse interrupt sources - aka vector table.
     vectors = {}
     for name, irq_num, descr in s:gmatch("INTSRC=(%w+),(%d+),(%S+)") do
@@ -122,6 +130,7 @@ function parse_ini(s)
         ram_size = ram_size,
         eeprom_start = eeprom_start,
         eeprom_end = eeprom_end,
+        bsr_bits = bsr_bits,
         vectors = vectors,
         sfrs = sfrs,
         sfr_fields = sfr_fields
@@ -150,14 +159,22 @@ function print_equates(pack_file, chip, eq)
     p("( Equates for %s, generated from %s.)", chip, pack_file)
     p "\ndecimal"
     p("\n%d constant #flash", eq.rom_size)      -- XXX print as KiB?
-    p("\"%04x constant @ram", eq.ram_start)
 
     if eq.ram_size then
         p("%d constant #ram", eq.ram_size)
     end
+
+    p("\"%04x constant @ram", eq.ram_start)
+
     if eq.eeprom_start then
         p("\"%6x constant @eeprom", eq.eeprom_start)
         p("%d constant #eeprom", eq.eeprom_end - eq.eeprom_start + 1)
+    end
+
+    -- It seems like the BSR has either 4 or 6 bits. So let's define a
+    -- symbol if it has 6, and leave it undefined for 4.
+    if eq.bsr_bits and eq.bsr_bits == 6 then
+        p "-d bsr-has-6-bits"
     end
 
     if #eq.vectors > 0 then
