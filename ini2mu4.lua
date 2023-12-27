@@ -226,7 +226,7 @@ function print_equates(pack_file, chip, eq)
     end
 
     -- Print these in memory order.
-    print_range("userid", eq.userid)
+    print_range("user-id", eq.userid)
     print_range("config", eq.config)
     print_range("eeprom", eq.eeprom)
 
