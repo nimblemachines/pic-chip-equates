@@ -17,7 +17,11 @@ end
 -- There is one each of these:
 --   ROMSIZE=<size_of_rom>
 --   RAMSIZE=<size_of_ram>
+
+-- There might be one each of these:
+--   CFGMEM=<range_start>,<range_end>
 --   EEPROM=<range_start>,<range_end>
+--   USERIDMEM=<range_start>,<range_end>
 
 -- And several of these:
 --   INTSRC=<name>,<irq number>,<description>
@@ -25,21 +29,29 @@ end
 --   SFRFLD=<name>,<address>,<bit-position>,<bit-width>
 
 function parse_ini(s)
+    local function parse_range(name)
+        local range_start, range_end = s:match(name .. "=(%x+)%-(%x+)")
+        if range_start then
+            local range_start, range_end = tonumber(range_start, 16), tonumber(range_end, 16)
+            -- Return start and size.
+            return { range_start, range_end - range_start + 1 }
+        end
+        return nil
+    end
+
     local rom_size = s:match("ROMSIZE=(%x+)")
     if rom_size then rom_size = tonumber(rom_size, 16) end
 
     local ram_size = s:match("RAMSIZE=(%x+)")
     if ram_size then ram_size = tonumber(ram_size, 16) end
 
-    local eeprom_start, eeprom_end = s:match("EEPROM=(%x+)%-(%x+)")
-    if eeprom_start then
-        eeprom_start = tonumber(eeprom_start, 16)
-        eeprom_end = tonumber(eeprom_end, 16)
-    end
+    local config = parse_range "CFGMEM"
+    local eeprom = parse_range "EEPROM"
+    local userid = parse_range "USERIDMEM"
 
-    -- Start of RAM is hard. We can maybe infer it from the first part of
+    -- Start of RAM is hard. For PIC18's we can infer it from the first part of
     -- COMMON=<addr>.
-    local ram_start = s:match("COMMON=(%x+)%-")
+    local ram_start = s:match "COMMON=(%x+)%-"
     if ram_start then ram_start = tonumber(ram_start, 16) end
 
     -- We need to know how many bits in the bank select register (BSR).
@@ -47,8 +59,26 @@ function parse_ini(s)
     -- with lots of RAM and i/o that have 6 bit BSRs.
     -- For some reason, at least with the K and Q parts, it has a "0x"
     -- prefix!
-    local bsr_bits = s:match("BSRBITS=0x(%x+)")
-    if bsr_bits then bsr_bits = tonumber(bsr_bits, 16) end
+    -- For now, we don't bother trying to match a decimal version.
+    local bsr_bits = s:match "BSRBITS=0x(%x+)\n"
+    if bsr_bits then
+        bsr_bits = tonumber(bsr_bits, 16)
+    end
+
+    -- Some special hacks where PIC18 and PIC16 differ.
+    if s:match "ARCH=PIC14E" then
+        -- For PIC16 parts, we match BANKSELBITS. Also has 0x prefix!
+        bsr_bits = s:match "BANKSELBITS=0x(%x+)\n"
+        if bsr_bits then
+            bsr_bits = tonumber(bsr_bits, 16)
+        end
+        -- For PIC16's, LINEARBASE is better a better @ram.
+        -- XXX Not sure how to deduce linear #ram number!
+        ram_start = s:match "LINEARBASE=0x(%x+)\n"
+        if ram_start then ram_start = tonumber(ram_start, 16) end
+        -- Config space is named differently from PIC18.
+        config = parse_range "CONFIG"
+    end
 
     -- Parse interrupt sources - aka vector table.
     vectors = {}
@@ -128,8 +158,9 @@ function parse_ini(s)
         rom_size = rom_size,
         ram_start = ram_start,
         ram_size = ram_size,
-        eeprom_start = eeprom_start,
-        eeprom_end = eeprom_end,
+        config = config,
+        eeprom = eeprom,
+        userid = userid,
         bsr_bits = bsr_bits,
         vectors = vectors,
         sfrs = sfrs,
@@ -156,35 +187,64 @@ function print_equates(pack_file, chip, eq)
         print((string.gsub(string.format(fmt, ...), "%s+$", "")))
     end
 
+    local function kibi(n)
+        if (n >= 1024) and (n & 0x3ff == 0) then
+            -- Print Ki in decimal. If > 9, print # prefix.
+            local ki = n >> 10
+            local prefix = (ki > 9) and "#" or ""
+            return fmt("%s%d Ki", prefix, ki)
+        else
+            return fmt("%x", n)
+        end
+    end
+
+    local function origin(m)
+        return fmt("%02x_%04x", m >> 16, m & 0xffff)
+    end
+
+    local function print_range(name, r)
+        if r then
+            if r[1] > 0x10000 then
+                -- PIC18
+                p("\n%s constant @%s", origin(r[1]), name)
+                p("%7s constant #%s", kibi(r[2]), name)
+            else
+                -- PIC16
+                p("\n%04x constant @%s", r[1], name)
+                p("%4s constant #%s", kibi(r[2]), name)
+            end
+        end
+    end
+
     p("( Equates for %s, generated from %s.)", chip, pack_file)
-    p "\ndecimal"
-    p("\n%d constant #flash", eq.rom_size)      -- XXX print as KiB?
+    --p "\ndecimal"
+    p "\nhex"
+    p("\n%s constant #flash", kibi(eq.rom_size))
 
+    p("\n%x constant @ram", eq.ram_start)
     if eq.ram_size then
-        p("%d constant #ram", eq.ram_size)
+        p("%s constant #ram", kibi(eq.ram_size))
     end
 
-    p("\"%04x constant @ram", eq.ram_start)
+    -- Print these in memory order.
+    print_range("userid", eq.userid)
+    print_range("config", eq.config)
+    print_range("eeprom", eq.eeprom)
 
-    if eq.eeprom_start then
-        p("\"%6x constant @eeprom", eq.eeprom_start)
-        p("%d constant #eeprom", eq.eeprom_end - eq.eeprom_start + 1)
-    end
-
-    -- It seems like the BSR has either 4 or 6 bits. So let's define a
-    -- symbol if it has 6, and leave it undefined for 4.
-    if eq.bsr_bits and eq.bsr_bits == 6 then
-        p "-d bsr-has-6-bits"
+    if eq.bsr_bits and eq.bsr_bits >= 4 then
+        p("\n%d constant bsr-bits", eq.bsr_bits)
+    else
+        p "\nerror\" No BSRBITS definition found. Probably an error.\""
     end
 
     if #eq.vectors > 0 then
-        p "\n( Vector table)"
+        p "\ndecimal\n\n( Vector table)"
         for _,v in ipairs(eq.vectors) do
             p("%3d vector %-14s | %s", v.irq_num, v.name.."_IRQ", v.descr)
         end
     end
 
-    p "hex\n\n( SFRs)"
+    p "\nhex\n\n( SFRs)"
     for _,sfr in ipairs(eq.sfrs) do
         if sfr.bit_width then
             p("%04x equ %-12s | alias; %d bits wide",
