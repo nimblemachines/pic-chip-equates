@@ -217,7 +217,6 @@ function print_equates(pack_file, chip, eq)
     end
 
     p("( Equates for %s, generated from %s.)", chip, pack_file)
-    --p "\ndecimal"
     p "\nhex"
     p("\n%s constant #flash", kibi(eq.rom_size))
 
