@@ -79,7 +79,7 @@ get-packs : mchp-pack-index.lua pack
 unzip-packs :
 	for p in pack/*.atpack; do \
 		dir=ini/$$(basename $$p .atpack); mkdir -p $$dir; \
-		unzip -j -u $$p "*.ini" -d $$dir; done
+		unzip -j -u $$p "*.ini" "*.cfgdata" -d $$dir; done
 
 
 ### Cleaning up the mess
