@@ -187,27 +187,25 @@ function print_equates(pack_file, chip, eq)
         print((string.gsub(string.format(fmt, ...), "%s+$", "")))
     end
 
+    -- Always returns a string that is 5 characters wide.
     local function kibi(n)
         if (n >= 1024) and (n & 0x3ff == 0) then
-            -- Print Ki in decimal. If > 9, print # prefix.
+            -- Print Ki in decimal.
             local ki = n >> 10
-            local prefix = (ki > 9) and "#" or ""
-            return fmt("%s%d Ki", prefix, ki)
+            return fmt("%2d Ki", ki)
         else
-            return fmt("%x", n)
+            return fmt("%5d", n)
         end
-    end
-
-    local function origin(m)
-        return fmt("%02x_%04x", m >> 16, m & 0xffff)
     end
 
     local function print_range(name, r)
         if r then
             if r[1] > 0x10000 then
                 -- PIC18
-                p("\n%s constant @%s", origin(r[1]), name)
-                p("%7s constant #%s", kibi(r[2]), name)
+                -- The following is commented out because all the origins
+                -- are being defined elsewhere.
+                --p("\n\"%02x_%04x constant @%s", r[1] >> 16, r[1] & 0xffff, name)
+                p("%s constant #%s", kibi(r[2]), name)
             else
                 -- PIC16
                 p("\n%04x constant @%s", r[1], name)
@@ -217,27 +215,28 @@ function print_equates(pack_file, chip, eq)
     end
 
     p("( Equates for %s, generated from %s.)", chip, pack_file)
-    p "\nhex"
+    p "\ndecimal"
     p("\n%s constant #flash", kibi(eq.rom_size))
 
-    p("\n%x constant @ram", eq.ram_start)
+    p("\n\"%04x constant @ram", eq.ram_start)
     if eq.ram_size then
         p("%s constant #ram", kibi(eq.ram_size))
     end
 
     -- Print these in memory order.
+    p ""
     print_range("user-id", eq.userid)
     print_range("config", eq.config)
     print_range("eeprom", eq.eeprom)
 
     if eq.bsr_bits and eq.bsr_bits >= 4 then
-        p("\n%d constant bsr-bits", eq.bsr_bits)
+        p("\n%d constant #bsr-bits", eq.bsr_bits)
     else
         p "\nerror\" No BSRBITS definition found. Probably an error.\""
     end
 
     if #eq.vectors > 0 then
-        p "\ndecimal\n\n( Vector table)"
+        p "\n( Vector table)"
         for _,v in ipairs(eq.vectors) do
             p("%3d vector %-14s | %s", v.irq_num, v.name.."_IRQ", v.descr)
         end

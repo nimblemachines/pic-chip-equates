@@ -4,6 +4,7 @@
 ### Variables
 
 CHIPS=		16f1454 \
+		18f13k50 18f14k50 \
 		18f55q43 18f56q43 18f57q43 \
 		18f56q84 18f57q84
 
@@ -27,6 +28,7 @@ example : get-example-packs unzip-packs
 get-example-packs :
 	MATCH="PIC12%-16F1" make get-packs
 	MATCH="PIC18F%-Q" make get-packs
+	MATCH="PIC18F%-K" make get-packs
 
 chips : $(MU4_FILES)
 
