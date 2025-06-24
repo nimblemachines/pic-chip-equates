@@ -5,7 +5,9 @@
 
 CHIPS=		16f1454 \
 		18f13k50 18f14k50 \
+		18f14q41 18f15q41 18f16q41 \
 		18f55q43 18f56q43 18f57q43 \
+		18f54q71 18f55q71 18f56q71 \
 		18f56q84 18f57q84
 
 MU4_FILES=	$(patsubst %,mu/%.mu4,$(CHIPS))
@@ -24,11 +26,20 @@ vpath %.ini $(wildcard ini/*/)
 example : get-example-packs unzip-packs
 	make chips
 
+# Show the packs needed for the example CHIPS variable defined above. This can
+# be useful to check version numbers.
+show-example-packs :
+	MATCH="PIC12%-16F1" make show-packs
+	MATCH="PIC18F%-J" make show-packs
+	MATCH="PIC18F%-K" make show-packs
+	MATCH="PIC18F%-Q" make show-packs
+
 # Download the packs needed for the example CHIPS variable defined above.
 get-example-packs :
 	MATCH="PIC12%-16F1" make get-packs
-	MATCH="PIC18F%-Q" make get-packs
+	MATCH="PIC18F%-J" make get-packs
 	MATCH="PIC18F%-K" make get-packs
+	MATCH="PIC18F%-Q" make get-packs
 
 chips : $(MU4_FILES)
 
@@ -82,6 +93,20 @@ unzip-packs :
 	for p in pack/*.atpack; do \
 		dir=ini/$$(basename $$p .atpack); mkdir -p $$dir; \
 		unzip -j -u $$p "*.ini" "*.cfgdata" -d $$dir; done
+
+
+### Installing into a local muforth checkout
+
+.PHONY : muforth-install
+
+# Path to "install" .mu4 files. This should be a "muforth" directory.
+MU_INSTALL_DIR=	$(HOME)/muforth
+
+muforth-install : $(MU4_FILES)
+	mkdir -p $(MU_INSTALL_DIR)/mu/target/PIC16/device
+	cp -f mu/16f* $(MU_INSTALL_DIR)/mu/target/PIC16/device
+	mkdir -p $(MU_INSTALL_DIR)/mu/target/PIC18/device
+	cp -f mu/18f* $(MU_INSTALL_DIR)/mu/target/PIC18/device
 
 
 ### Cleaning up the mess
