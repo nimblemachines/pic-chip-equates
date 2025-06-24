@@ -12,6 +12,44 @@ function fix_irq_descr(d)
     return d
 end
 
+-- We want to make sure that the RAM amount declared in the .ini file
+-- is actually *contiguous*. The GPRBANKS declaration tells us the
+-- address and size of each bank. By parsing it we can see if the
+-- chunks are all contiguous.
+--
+-- On a modern PIC18 (like the Q family) the RAM starts *after* the i/o
+-- regs; eg, at 0500. On most older chips the ram starts at 0000 and
+-- the i/o registers are at the top end of a 4 Ki data area.
+--
+-- Here is the 56Q43:
+--   GPRBANKS=560-5FF,600-6FF,700-7FF,800-8FF,900-9FF,A00-AFF,B00-BFF,\
+--          C00-CFF,D00-DFF,E00-EFF,F00-FFF,1000-10FF,1100-11FF,1200-12FF,\
+--          1300-13FF,1400-14FF
+--
+-- And here is the 13K50, which has a hole (between the "normal" ram
+-- and the USB ram, both of which contribute to the total declared by
+-- RAMSIZE:
+--   GPRBANKS=060-0FF,200-2FF
+
+function last_contiguous_addr(gprbanks)
+    local expected_start_addr
+    local last_contiguous
+
+    for start_addr, end_addr in gprbanks:gmatch "(%x+)%-(%x+)" do
+        start_addr = tonumber(start_addr, 16)
+        end_addr = tonumber(end_addr, 16)
+        -- First bank doesn't start on a mod 256 address; only do following
+        -- test if *not* first bank.
+        if start_addr % 256 == 0 then
+            if expected_start_addr ~= start_addr then
+                last_contiguous = expected_start_addr
+            end
+        end
+        expected_start_addr = end_addr + 1
+    end
+    return last_contiguous or expected_start_addr
+end
+
 -- We want to match the following:
 
 -- There is one each of these:
@@ -28,6 +66,11 @@ end
 --   SFR=<name>,<address>,<bit-width>
 --   SFRFLD=<name>,<address>,<bit-position>,<bit-width>
 
+-- This could be useful:
+--   FLASH_EW=<erase_size,write_size>
+--      Defines the block erase size (bytes) of flash erase operations,
+--      and the buffered write size (bytes) of flash write operations.
+
 function parse_ini(s)
     local function parse_range(name)
         local range_start, range_end = s:match(name .. "=(%x+)%-(%x+)")
@@ -42,6 +85,12 @@ function parse_ini(s)
     local rom_size = s:match("ROMSIZE=(%x+)")
     if rom_size then rom_size = tonumber(rom_size, 16) end
 
+    local flash_erase_size, flash_write_size = s:match "FLASH_EW=(%x+),(%x+)"
+    if flash_erase_size then
+        flash_erase_size = tonumber(flash_erase_size, 16)
+        flash_write_size = tonumber(flash_write_size, 16)
+    end
+
     local ram_size = s:match("RAMSIZE=(%x+)")
     if ram_size then ram_size = tonumber(ram_size, 16) end
 
@@ -53,6 +102,12 @@ function parse_ini(s)
     -- COMMON=<addr>.
     local ram_start = s:match "COMMON=(%x+)%-"
     if ram_start then ram_start = tonumber(ram_start, 16) end
+
+    local gprbanks = s:match "GPRBANKS=([%x,-]+)"
+    local contiguous_ram_size
+    if gprbanks then
+        contiguous_ram_size = last_contiguous_addr(gprbanks) - ram_start
+    end
 
     -- We need to know how many bits in the bank select register (BSR).
     -- For many PIC18 parts, it is 4 bits. There are several newer parts
@@ -67,15 +122,27 @@ function parse_ini(s)
 
     -- Some special hacks where PIC18 and PIC16 differ.
     if s:match "ARCH=PIC14E" then
+        pic14e = true
+
+        -- Note that all flash sizes - ROMSIZE, FLASH_ERASE, and
+        -- FLASH_WRITE - given in hex (no 0x prefix) and are a count of
+        -- *words*, not bytes.
+        flash_erase_size = s:match "FLASH_ERASE=(%x+)"
+        if flash_erase_size then flash_erase_size = tonumber(flash_erase_size, 16) end
+        flash_write_size = s:match "FLASH_WRITE=(%x+)"
+        if flash_write_size then flash_write_size = tonumber(flash_write_size, 16) end
+
         -- For PIC16 parts, we match BANKSELBITS. Also has 0x prefix!
         bsr_bits = s:match "BANKSELBITS=0x(%x+)\n"
         if bsr_bits then
             bsr_bits = tonumber(bsr_bits, 16)
         end
-        -- For PIC16's, LINEARBASE is better a better @ram.
+
+        -- For PIC16's, LINEARBASE is a better @ram.
         -- XXX Not sure how to deduce linear #ram number!
         ram_start = s:match "LINEARBASE=0x(%x+)\n"
         if ram_start then ram_start = tonumber(ram_start, 16) end
+
         -- Config space is named differently from PIC18.
         config = parse_range "CONFIG"
     end
@@ -103,13 +170,20 @@ function parse_ini(s)
 
     -- Parse SFRs.
     sfrs = {}
+
+    local data_addr_bits = bsr_bits and (bsr_bits + 8) or 12
+    sfr_start = (1 << data_addr_bits)   -- Set to *end* of data space
+
     for name, addr, bit_width in s:gmatch("SFR=(%w+),(%x+),(%d+)") do
         addr, bit_width = tonumber(addr, 16), tonumber(bit_width, 10)
         if bit_width > 8 then
             sfrs[#sfrs+1] = { name = name, addr = addr, bit_width = bit_width }
         else
-            -- assume a bit_width of 8
+            -- Assume a bit_width of 8
             sfrs[#sfrs+1] = { name = name, addr = addr }
+
+            -- Ignore aliases when calculating start.
+            if addr < sfr_start then sfr_start = addr end
         end
     end
 
@@ -155,16 +229,21 @@ function parse_ini(s)
 
     -- Return everything in a table.
     return {
+        pic14e = pic14e,
         rom_size = rom_size,
+        flash_erase_size = flash_erase_size,
+        flash_write_size = flash_write_size,
         ram_start = ram_start,
         ram_size = ram_size,
+        contiguous_ram_size = contiguous_ram_size,
         config = config,
         eeprom = eeprom,
         userid = userid,
         bsr_bits = bsr_bits,
         vectors = vectors,
         sfrs = sfrs,
-        sfr_fields = sfr_fields
+        sfr_fields = sfr_fields,
+        sfr_start = sfr_start,
     }
 end
 
@@ -187,14 +266,14 @@ function print_equates(pack_file, chip, eq)
         print((string.gsub(string.format(fmt, ...), "%s+$", "")))
     end
 
-    -- Always returns a string that is 5 characters wide.
+    -- Always returns a string that is 6 characters wide.
     local function kibi(n)
         if (n >= 1024) and (n & 0x3ff == 0) then
             -- Print Ki in decimal.
             local ki = n >> 10
-            return fmt("%2d Ki", ki)
+            return fmt("%3d Ki", ki)
         else
-            return fmt("%5d", n)
+            return fmt("%6d", n)
         end
     end
 
@@ -208,8 +287,8 @@ function print_equates(pack_file, chip, eq)
                 p("%s constant #%s", kibi(r[2]), name)
             else
                 -- PIC16
-                p("\n%04x constant @%s", r[1], name)
-                p("%4s constant #%s", kibi(r[2]), name)
+                p(" \"%04x constant @%s", r[1], name)
+                p("%s constant #%s", kibi(r[2]), name)
             end
         end
     end
@@ -220,10 +299,21 @@ function print_equates(pack_file, chip, eq)
 
     p "\ndecimal"
     p("\n%s constant #flash", kibi(eq.rom_size))
+    p("%s constant #flash-erase-size", kibi(eq.flash_erase_size))
+    p("%s constant #flash-write-size", kibi(eq.flash_write_size))
 
-    p("\n\"%04x constant @ram", eq.ram_start)
+    p("\n \"%04x constant @ram", eq.ram_start)
     if eq.ram_size then
-        p("%s constant #ram", kibi(eq.ram_size))
+        if eq.contiguous_ram_size and eq.contiguous_ram_size < eq.ram_size then
+            p("%s constant #ram  ( using contiguous ram size, not total ram size)",
+                kibi(eq.contiguous_ram_size))
+        else
+            p("%s constant #ram", kibi(eq.ram_size))
+        end
+    end
+
+    if not eq.pic14e then
+        p("\n \"%04x constant @sfr", eq.sfr_start)
     end
 
     -- Print these in memory order.
@@ -246,6 +336,7 @@ function print_equates(pack_file, chip, eq)
     end
 
     p "\nhex\n\n( SFRs)"
+
     for _,sfr in ipairs(eq.sfrs) do
         if sfr.bit_width then
             p("%04x equ %-12s | alias; %d bits wide",
