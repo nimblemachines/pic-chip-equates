@@ -2,13 +2,20 @@
 
 fmt = string.format
 
--- An entry looks like this:
+-- As of 2025-jun-11, an entry looks like this:
+--           </h3>
+--           <a href="Microchip.ATautomotive_DFP.3.1.73.atpack" download="">
+--             <button type="button" class="btn btn-primary pull-right download-button" data-link=""><span class="glyphicon glyphicon-download"></span> Download</button>
+--           </a>
+--
+-- An entry *used to* look like this:
 -- </h3>
 --            <button type="button" class="btn btn-primary pull-right download-button" data-toggle="modal" data-target="#eula-modal" data-link="Microchip.ATtiny_DFP.3.0.151.atpack">
 
+
 function parse(s)
     local packs = {}
-    for pack in s:gmatch [[</h3>%s+<button.-data%-link="(%S-%.atpack)">]] do
+    for pack in s:gmatch [[</h3>%s+<a href="(%S-%.atpack)" download="">]] do
         packs[#packs+1] = pack
     end
 
